@@ -47,10 +47,10 @@ def call_agent_to_fix(branch_name, feedback, original_content, filename):
     print(f"\n{'!' * 60}")
     print(f"FIXING ISSUES: {branch_name}")
     print(f"{'!' * 60}\n")
-
+    
     # Make sure we're on the branch
     checkout_branch(branch_name)
-
+    
     fix_prompt = f"""You are fixing wiki documentation that was rejected by a reviewer.
 
 Original source file: {filename}
@@ -68,96 +68,72 @@ Your task:
 
 After fixing, commit your changes.
 """
-
+    
     print("Calling OpenCode agent to fix issues...")
     print(f"Fix prompt preview: {fix_prompt[:200]}...\n")
-
+    
     # Call OpenCode with fix prompt
     result = run_cmd(["opencode", "run", fix_prompt])
-
+    
     if result.returncode != 0:
         print(f"Fix agent failed: {result.stderr}")
         return False
-
+    
     print(f"\nFix agent output:\n{result.stdout}\n")
-
-    # Check if there are changes
-    result = run_cmd(["git", "status", "--porcelain", "wiki/"])
-
+    
+    # Check if there's a diff between master and this branch
+    result = run_cmd(["git", "diff", "master", branch_name, "--", "wiki/"])
+    
     if result.stdout.strip():
-        print("Changes detected after fixes")
-        # Add and commit
-        run_cmd(["git", "add", "wiki/"])
-        result = run_cmd(
-            ["git", "commit", "-m", "Fix wiki issues based on reviewer feedback"]
-        )
-
-        if result.returncode == 0:
-            print("✓ Committed fixes")
-            return True
-        else:
-            print(f"Failed to commit fixes: {result.stderr}")
-            return False
+        print("✓ Fix agent made changes")
+        return True
     else:
-        print("No changes made by fix agent")
+        print("⚠ Fix agent didn't make any changes")
         return False
 
 
-def review_and_merge_loop(
-    branch_name, original_branch, info_id, filename, content, max_iterations=5
-):
+def review_and_merge_loop(branch_name, info_id, filename, content, max_iterations=5):
     """Review and fix loop - keeps trying until accepted or max iterations reached."""
-
+    
     iteration = 0
-
+    
     while iteration < max_iterations:
         iteration += 1
         print(f"\n{'~' * 60}")
         print(f"REVIEW CYCLE {iteration}/{max_iterations}: {branch_name}")
         print(f"{'~' * 60}\n")
-
+        
         # Make sure we're on the branch
         checkout_branch(branch_name)
-
-        # Get the diff between original branch and current branch
-        result = run_cmd(["git", "diff", original_branch, branch_name, "--", "wiki/"])
+        
+        # Get the diff between master and current branch
+        result = run_cmd(["git", "diff", "master", branch_name, "--", "wiki/"])
         diff_output = result.stdout
-
+        
         if not diff_output.strip():
-            print("⚠ No diff detected between branches")
+            print("⚠ No diff detected between master and branch")
             # Check if wiki files exist on this branch
-            result = run_cmd(
-                ["git", "ls-tree", "-r", "--name-only", branch_name, "wiki/"]
-            )
+            result = run_cmd(["git", "ls-tree", "-r", "--name-only", branch_name, "wiki/"])
             if result.stdout.strip():
-                print("Wiki files exist but match original - merging anyway")
+                print("Wiki files exist but match master - merging anyway")
             else:
                 print("No wiki files found on branch")
-
+            
             # Merge and cleanup
-            checkout_branch(original_branch)
-            result = run_cmd(
-                [
-                    "git",
-                    "merge",
-                    "--no-ff",
-                    branch_name,
-                    "-m",
-                    f"Merge wiki updates from {info_id[:8]}",
-                ]
-            )
+            checkout_branch("master")
+            result = run_cmd(["git", "merge", "--no-ff", branch_name, "-m", f"Merge wiki updates from {info_id[:8]}"])
             if result.returncode == 0:
                 run_cmd(["git", "branch", "-d", branch_name])
             return True
-
+        
         print(f"Changes detected ({len(diff_output)} chars of diff)\n")
-
+        
         # Create review prompt
         review_prompt = f"""You are a code reviewer for a wiki documentation project.
 
 Your task is to review the changes made to the wiki in branch '{branch_name}'.
 
-Here is the diff of changes:
+Here is the diff of changes compared to master:
 
 {diff_output}
 
@@ -176,42 +152,33 @@ Respond with EXACTLY one of:
 
 Be specific about what needs to be fixed if you reject.
 """
-
+        
         print("Calling OpenCode reviewer agent...")
-
+        
         # Call OpenCode with review prompt
         result = run_cmd(["opencode", "run", review_prompt])
-
+        
         if result.returncode != 0:
             print(f"Review agent failed: {result.stderr}")
             # Force merge to clean up
-            checkout_branch(original_branch)
-            result = run_cmd(
-                [
-                    "git",
-                    "merge",
-                    "--no-ff",
-                    branch_name,
-                    "-m",
-                    f"Force merge wiki updates from {info_id[:8]} (review failed)",
-                ]
-            )
+            checkout_branch("master")
+            result = run_cmd(["git", "merge", "--no-ff", branch_name, "-m", f"Force merge wiki updates from {info_id[:8]} (review failed)"])
             if result.returncode == 0:
                 run_cmd(["git", "branch", "-d", branch_name])
             return False
-
+        
         review_output = result.stdout.strip()
         print(f"\nReview output:\n{review_output}\n")
-
+        
         # Check if accepted or rejected
         if "ACCEPT" in review_output.upper():
             print("✓ Changes ACCEPTED by reviewer")
-            print(f"Merging {branch_name} into {original_branch}...")
-
-            # Checkout original branch
-            if not checkout_branch(original_branch):
+            print(f"Merging {branch_name} into master...")
+            
+            # Checkout master
+            if not checkout_branch("master"):
                 return False
-
+            
             # Merge the branch
             result = run_cmd(
                 [
@@ -223,31 +190,31 @@ Be specific about what needs to be fixed if you reject.
                     f"Merge wiki updates from {info_id[:8]}",
                 ]
             )
-
+            
             if result.returncode == 0:
                 print(f"✓ Successfully merged {branch_name}")
-
+                
                 # Delete the branch
                 result = run_cmd(["git", "branch", "-d", branch_name])
                 if result.returncode == 0:
                     print(f"✓ Deleted branch {branch_name}")
-
+                
                 return True
             else:
                 print(f"✗ Merge failed: {result.stderr}")
                 # Try force delete
                 run_cmd(["git", "branch", "-D", branch_name])
                 return False
-
+        
         else:
             # Rejected - extract feedback and call fix agent
             print(f"✗ Changes REJECTED by reviewer (iteration {iteration})")
-
+            
             if iteration >= max_iterations:
                 print(f"⚠ Max iterations ({max_iterations}) reached without acceptance")
                 # Force merge anyway to avoid leaving branches
                 print("Force merging to avoid leaving dangling branches...")
-                checkout_branch(original_branch)
+                checkout_branch("master")
                 result = run_cmd(
                     [
                         "git",
@@ -261,12 +228,12 @@ Be specific about what needs to be fixed if you reject.
                 if result.returncode == 0:
                     run_cmd(["git", "branch", "-d", branch_name])
                 return False
-
+            
             # Call fix agent - this stays on the branch and commits fixes
             if not call_agent_to_fix(branch_name, review_output, content, filename):
                 print("Fix agent failed to make changes")
                 # Force merge to avoid leaving branches
-                checkout_branch(original_branch)
+                checkout_branch("master")
                 result = run_cmd(
                     [
                         "git",
@@ -280,23 +247,14 @@ Be specific about what needs to be fixed if you reject.
                 if result.returncode == 0:
                     run_cmd(["git", "branch", "-d", branch_name])
                 return False
-
+            
             # Loop continues to review again
             print("\nRetrying review with fixes...\n")
-
+    
     # Should never reach here but just in case
     print("⚠ Exited loop unexpectedly, force merging...")
-    checkout_branch(original_branch)
-    result = run_cmd(
-        [
-            "git",
-            "merge",
-            "--no-ff",
-            branch_name,
-            "-m",
-            f"Force merge wiki updates from {info_id[:8]} (unexpected exit)",
-        ]
-    )
+    checkout_branch("master")
+    result = run_cmd(["git", "merge", "--no-ff", branch_name, "-m", f"Force merge wiki updates from {info_id[:8]} (unexpected exit)"])
     if result.returncode == 0:
         run_cmd(["git", "branch", "-d", branch_name])
     return False
@@ -322,11 +280,11 @@ def process_info_file(info_path):
     print(f"Commit: {commit_id}")
     print(f"Content length: {len(content)} chars\n")
 
-    # Save the original branch
-    original_branch = get_current_branch()
-    if not original_branch:
-        print("Could not determine current branch")
-        return False
+    # Make sure we're on master
+    current_branch = get_current_branch()
+    if current_branch != "master":
+        print(f"Not on master branch (on {current_branch}), switching...")
+        checkout_branch("master")
 
     # Create a branch for this info file
     branch_name = f"wiki-update-{info_id}"
@@ -337,7 +295,7 @@ def process_info_file(info_path):
         print(f"Branch {branch_name} already exists, deleting it first...")
         # Force delete the old branch
         run_cmd(["git", "branch", "-D", branch_name])
-
+    
     print(f"Creating branch: {branch_name}")
     if not create_branch(branch_name):
         return False
@@ -368,25 +326,32 @@ Do NOT touch any files outside of the /wiki directory.
     print("Calling OpenCode agent...")
     print(f"Prompt preview: {prompt[:200]}...\n")
 
-    # Call OpenCode with the prompt by passing it as input
+    # Call OpenCode with the prompt
     result = run_cmd(["opencode", "run", prompt])
 
     if result.returncode != 0:
         print(f"OpenCode execution failed: {result.stderr}")
-        checkout_branch(original_branch)
+        checkout_branch("master")
         run_cmd(["git", "branch", "-D", branch_name])
+        
+        # Still move to processed to mark as attempted
+        processed_dir = Path("processed")
+        processed_dir.mkdir(exist_ok=True)
+        dest_path = processed_dir / info_path.name
+        shutil.move(str(info_path), str(dest_path))
+        print(f"⚠ Moved {info_path.name} to processed/ (opencode failed)")
         return False
 
     print(f"\nOpenCode output:\n{result.stdout}\n")
 
-    # Check if wiki files exist on this branch (OpenCode may have already committed)
-    result = run_cmd(["git", "ls-tree", "-r", "--name-only", branch_name, "wiki/"])
-
+    # Check if there's a diff between master and this branch
+    result = run_cmd(["git", "diff", "master", branch_name, "--", "wiki/"])
+    
     if not result.stdout.strip():
-        print("✗ No wiki files found on branch - OpenCode agent failed to create files")
-        checkout_branch(original_branch)
+        print("✗ No diff between master and branch - OpenCode agent failed to create files")
+        checkout_branch("master")
         run_cmd(["git", "branch", "-D", branch_name])
-
+        
         # Still move to processed to mark as attempted
         processed_dir = Path("processed")
         processed_dir.mkdir(exist_ok=True)
@@ -395,29 +360,10 @@ Do NOT touch any files outside of the /wiki directory.
         print(f"⚠ Moved {info_path.name} to processed/ (no wiki files created)")
         return False
 
-    print(f"✓ Wiki files found on branch: {len(result.stdout.strip().split())} files")
-
-    # Check if there are uncommitted changes
-    result = run_cmd(["git", "status", "--porcelain", "wiki/"])
-
-    if result.stdout.strip():
-        print("Uncommitted changes detected, committing...")
-        # Add and commit the changes
-        run_cmd(["git", "add", "wiki/"])
-        commit_msg = f"Update wiki based on {filename} (commit {commit_id[:8]})"
-        result = run_cmd(["git", "commit", "-m", commit_msg])
-
-        if result.returncode != 0:
-            print(f"Failed to commit: {result.stderr}")
-        else:
-            print(f"✓ Committed changes: {commit_msg}")
-    else:
-        print("✓ All changes already committed by OpenCode")
+    print(f"✓ Wiki changes detected on branch")
 
     # REVIEW AND MERGE PHASE - Loop until accepted or max iterations
-    review_accepted = review_and_merge_loop(
-        branch_name, original_branch, info_id, filename, content
-    )
+    review_accepted = review_and_merge_loop(branch_name, info_id, filename, content)
 
     # Always move to processed since we always merge (even if not accepted after max iterations)
     processed_dir = Path("processed")
@@ -425,14 +371,12 @@ Do NOT touch any files outside of the /wiki directory.
 
     dest_path = processed_dir / info_path.name
     shutil.move(str(info_path), str(dest_path))
-
+    
     if review_accepted:
         print(f"✓ Moved {info_path.name} to processed/ (accepted)")
         return True
     else:
-        print(
-            f"⚠ Moved {info_path.name} to processed/ (merged after max iterations or issues)"
-        )
+        print(f"⚠ Moved {info_path.name} to processed/ (merged after max iterations or issues)")
         return False
 
 
