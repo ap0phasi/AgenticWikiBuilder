@@ -131,7 +131,7 @@ def review_and_merge_loop(branch_name, info_id, filename, content, max_iteration
         # Create review prompt
         review_prompt = f"""You are a code reviewer for a wiki documentation project.
 
-Your task is to review the changes made to the wiki in branch '{branch_name}'.
+Your task is to review the changes made to the wiki in branch '{branch_name}', which were made based on the information found in '/info/{info_id}.json'
 
 Here is the diff of changes compared to master:
 
@@ -144,7 +144,7 @@ Criteria for acceptance:
 2. Content is well-organized and clear
 3. Links between pages are properly formatted as [Text](./page.md)
 4. No errors or malformed markdown
-5. Content accurately reflects the source material
+5. Content accurately reflects the source material found in '/info/{info_id}.json'
 
 Respond with EXACTLY one of:
 - ACCEPT: if the changes are good and should be merged
