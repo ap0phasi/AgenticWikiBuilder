@@ -15,7 +15,6 @@ def run_cmd(cmd, cwd=None):
     result = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
     return result
 
-
 def get_current_branch():
     """Get the current git branch name."""
     result = run_cmd(["git", "branch", "--show-current"])
@@ -380,7 +379,7 @@ Do NOT touch any files outside of the /wiki directory.
         return False
 
 
-def main():
+def run_agents():
     """Main function to process all info files."""
     print("Wiki Agent Processor")
     print("=" * 60)
@@ -424,4 +423,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    run_agents()

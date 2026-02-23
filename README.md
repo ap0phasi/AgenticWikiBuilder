@@ -2,7 +2,7 @@
 
 A Python-based tool that processes git commits to markdown files and uses AI agents to automatically generate and maintain a wiki.
 
-I won't try to do a glossy LLM pitch. I fully vibed this with Sonnet because I was frustrated with existing knowledge management and RAG tools. We all know pure vector embed RAG isn't sufficient, so now everyone is excited about Knowledge Graphs. But having used a lot of the established knowledge graph tools on the market, I think the triples structure is contrived. Sure it is cute when Alice works for Company A and Bob works for Company B, but when it comes to nuanced, conditional, temporal relationships the whole approach falls apart a bit in my opinion. Isn't the whole interest in LLMs for being able to handle nuanced, conditional context? So anyway I felt like it would be nice to instead have some AI agents build and maintain a personal wiki based on the data provided. Web crawlers and junk are already optimized for prowling through Wiki articles so I figured it wasn't a bad idea to just use that as a knowledge base.
+I won't try to do a glossy LLM pitch. I wrote this because I was frustrated with existing knowledge management and RAG tools. We all know pure vector embed RAG isn't sufficient, so now everyone is excited about Knowledge Graphs. But having used a lot of the established knowledge graph tools on the market, I think the triples structure is contrived. Sure it is cute when Alice works for Company A and Bob works for Company B, but when it comes to nuanced, conditional, temporal relationships the whole approach falls apart a bit in my opinion. Isn't the whole interest in LLMs for being able to handle nuanced, conditional context? So anyway I felt like it would be nice to instead have some AI agents build and maintain a personal wiki based on the data provided. Web crawlers and junk are already optimized for prowling through Wiki articles so I figured it wasn't a bad idea to just use that as a knowledge base.
 
 The main thing I couldn't decide on is how to handle citations back to the original data source. The obvious answer is doing anchor-style cites but those felt too brittle. So instead, the idea is that each time new data comes into `/raw`, we split the new data into broad hunks, and then for each hunk we task an agent with updating the wiki on a dedicated `git` branch tied to that hunk, and a reviewer with confirming the updates are valid. Once the reviewer is satisfied, the branch is merged into main. This way through `git blame` we can track what each piece of raw data motivated the updates to the wiki. I feel like this makes sense compared to relying only on citations.   
 
@@ -23,21 +23,13 @@ git commit -m "Updated documentation files"
 
 ### Step 2: Extract Changes
 
-Run the commit processor to create info files:
+Navigate to the working directory that contains your `/raw` files and run the agent workflow:
 
 ```bash
-python3 commit_processor.py
+cd /path/to/working && uv run /path/to/project/AgenticWikiBuilder/main.py
 ```
 
-This creates JSON files in `/info` directory with the file content and metadata.
-
-### Step 3: Generate Wiki Content
-
-Run the wiki agent to process info files and update the wiki:
-
-```bash
-python3 wiki_agent.py
-```
+This creates JSON files in `/info` directory with the file content and metadata and then runs the wiki agent to process info files and update the wiki:
 
 For each info file, the agent will:
 1. Create a branch named `wiki-update-{id}`

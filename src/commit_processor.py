@@ -96,10 +96,11 @@ def process_last_commit():
             print(f"Created info file: {info_file}")
 
 
-def main():
+def process_commit():
     """Main function."""
     print("Raw file commit processor")
 
+    print("Current working directory:", os.getcwd())
     # Create necessary directories
     Path("info").mkdir(exist_ok=True)
     Path("to_process").mkdir(exist_ok=True)
@@ -112,4 +113,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    process_commit()
