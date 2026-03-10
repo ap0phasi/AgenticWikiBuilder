@@ -14,7 +14,7 @@ This is just a thin Python wrapper on [OpenCode](https://github.com/anomalyco/op
 ### Running a Session
 
 ```bash
-cd /path/to/your/working/dir && uv run /path/to/this/repo/main.py
+cd /path/to/your/working/dir && uv run /path/to/this/repo/main.py --additional_prompt="<optional guiding prompt>" "<input file path>"
 ```
 
 For each session:
