@@ -216,7 +216,7 @@ def create_session(source_path):
         return None
 
 
-def main():
+def main(source_path):
     """Main entry point."""
     # Create base directories
     os.makedirs("wiki", exist_ok=True)
@@ -226,8 +226,6 @@ def main():
     # Initialize git if needed
     initialize_git_repo()
     
-    # Create session and copy raw data
-    source_path = "/mnt/c/Users/johnm/Documents/Learning/agentic_wiki_builder/raw/rust_programming.md"
     session_name = create_session(source_path)
     
     if not session_name:
@@ -265,4 +263,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # Create session and copy raw data
+    source_path = "/mnt/c/Users/johnm/Documents/Learning/agentic_wiki_builder/raw/thought.md"
+    main(source_path)
