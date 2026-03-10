@@ -1,6 +1,8 @@
 import duckdb
 import time
 import networkx as nx
+import itertools
+
 
 con = duckdb.connect()
 
@@ -9,13 +11,13 @@ INSTALL markdown FROM community;
 LOAD markdown;
             """)
 
-base_file_path = r"C:\Users\johnm\Documents\Learning\agentic_wiki_builder"
+base_file_path = r".\working"
 
-df = con.execute(f"""
-    SELECT * EXCLUDE file_path, parse_filename(file_path, true), split(section_path, '/') splits, ROW_NUMBER() OVER() FROM read_markdown_sections('{base_file_path}/raw/*.md', filename = true)
-                 """).df()
+# df = con.execute(f"""
+#     SELECT * EXCLUDE file_path, parse_filename(file_path, true), split(section_path, '/') splits, ROW_NUMBER() OVER() FROM read_markdown_sections('{base_file_path}/raw/*.md', filename = true)
+#                  """).df()
 
-breakpoint()
+# breakpoint()
 print("running")
 tic = time.time()
 graph = con.execute(f"""
@@ -38,7 +40,11 @@ print("time elapsed: ", toc - tic)
 
 G = nx.from_pandas_edgelist(graph[["link_from", "link_to"]], source = "link_from", target = "link_to")
 
-# Remove 'index.md' from G
-G.remove_node('index')
+# # Remove 'index.md' from G
+# G.remove_node('index')
 
-print([n for n in nx.connected_components(G)])
+groups = ["\n".join(["-" + a + ".md" for a in n]) for n in nx.connected_components(G)]
+print(groups)
+print(len(groups))
+pairs = list(itertools.combinations(groups, 2))
+print(pairs)

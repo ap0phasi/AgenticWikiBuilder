@@ -2,7 +2,7 @@
 
 A tool that uses AI agents to build and maintain a wiki from raw data sources.
 
-I won't try to do a glossy LLM pitch. I wrote this because I was frustrated with existing knowledge management and RAG tools. We all know pure vector embed RAG isn't sufficient, so now everyone is excited about Knowledge Graphs. But having used a lot of the established knowledge graph tools on the market, I think the triples structure is contrived. Sure it is cute when Alice works for Company A and Bob works for Company B, but when it comes to nuanced, conditional, temporal relationships the whole approach falls apart a bit in my opinion. Isn't the whole interest in LLMs for being able to handle nuanced, conditional context? So anyway I felt like it would be nice to instead have some AI agents build and maintain a personal wiki based on the data provided. Web crawlers and junk are already optimized for prowling through Wiki articles so I figured it wasn't a bad idea to just use that as a knowledge base.
+I won't try to do a glossy LLM pitch. I wrote this because I was frustrated with existing knowledge management and RAG tools. We all know pure vector embed RAG isn't sufficient, so now everyone is excited about Knowledge Graphs. But having used a lot of the established knowledge graph tools on the market, I think the triples structure is contrived. Sure it is cute when Alice works for Company A and Bob works for Company B, but when it comes to nuanced, conditional, temporal relationships the whole approach falls apart in my experience. Isn't the whole interest in LLMs for being able to handle nuanced, conditional context? So anyway I felt like it would be nice to instead have some AI agents build and maintain a personal wiki based on the data provided. Web crawlers and junk are already optimized for prowling through Wiki articles so I figured it wasn't a bad idea to just use that as a knowledge base.
 
 The main thing I couldn't decide on is how to handle citations back to the original data source. The obvious answer is doing anchor-style cites but those felt too brittle. So instead, the idea is that each time new data comes in, we create a session for processing it. Each session gets its own git branch, and an agent updates the wiki on that branch. Once done, we merge back to main. This way through `git blame` we can track what raw data motivated which wiki updates. I feel like this makes sense compared to relying only on citations.
 
@@ -25,18 +25,27 @@ For each session:
    
 2. **Creates git branch** `session-{uuid}` off main
 
-3. **Agent updates wiki** 
+3. **Writer Agent updates wiki** 
    - Reads from `sessions/{uuid}/raw/`
    - Updates markdown files in shared `/wiki` directory
    - Can write reusable Python scripts to `/helpers`
    - Documents changes in `sessions/{uuid}/docs/`
 
-4. **Commits and merges**
+4. **Editor Agent reviews Writer agent's work**
+   - Checks that the changes the writer made were correct
+   - Documents changes in `sessions/{uuid}/docs/`
+
+5. **Linker Agent makes sure Wiki is well linked**
+   - Uses `duckdb` to query the wikilinks between markdown files
+   - Uses `networkx` to find unlinked clusters
+   - Linker agent is tasked with seeing if there are reasonable links that should be added between these clusters
+
+5. **Commits and merges**
    - Commits changes on session branch
    - Merges back to main with session ID in merge commit
    - Deletes session branch
 
-5. **Track provenance**
+6. **Track provenance**
    - `git blame wiki/some_file.md` shows which session changed it
    - `git log --grep="session-{uuid}"` finds all changes from a session
    - Session workspace preserved in `sessions/{uuid}/` for reference

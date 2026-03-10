@@ -13,7 +13,11 @@ import shutil
 import sys
 import argparse
 
+import duckdb
+
 from src.agents.writer import writer_prompt
+from src.agents.editor import editor_prompt
+from src.agents.linker import find_unlinked_clusters, linker_prompt
 from src.agents.runner import call_agent
 from src.version_control import git_commit_and_merge_session, initialize_git_repo, git_create_session_branch
   
@@ -58,6 +62,12 @@ parser.add_argument("file_path")
 parser.add_argument("--additional_prompt","-a")
 
 def main(source_path, additional_prompt):
+    con = duckdb.connect()
+
+    con.execute("""
+    INSTALL markdown FROM community;
+    LOAD markdown;
+                """)
     """Main entry point."""
     # Create base directories
     os.makedirs("wiki", exist_ok=True)
@@ -79,8 +89,7 @@ def main(source_path, additional_prompt):
         print("Failed to create session branch. Exiting.")
         sys.exit(1)
     
-    # Call the doer agent
-    print("\nCalling doer agent...")
+    print("\nCalling writer agent...")
     success = call_agent(writer_prompt(session_name, additional_prompt))
     
     if not success:
@@ -89,6 +98,27 @@ def main(source_path, additional_prompt):
         subprocess.run(["git", "checkout", "main"], check=False)
         subprocess.run(["git", "branch", "-D", f"session-{session_name}"], check=False)
         sys.exit(1)
+
+    print("\nCalling editor agent...")
+    success = call_agent(editor_prompt(session_name, additional_prompt))
+    
+    if not success:
+        print("Agent execution failed.")
+        print("Switching back to main and cleaning up...")
+        subprocess.run(["git", "checkout", "main"], check=False)
+        subprocess.run(["git", "branch", "-D", f"session-{session_name}"], check=False)
+        sys.exit(1)
+
+    print("\nCalling linker agent...")
+    pairs = find_unlinked_clusters(con)
+    for pair in pairs:
+        success = call_agent(linker_prompt(pair, session_name))
+        if not success:
+            print("Agent execution failed.")
+            print("Switching back to main and cleaning up...")
+            subprocess.run(["git", "checkout", "main"], check=False)
+            subprocess.run(["git", "branch", "-D", f"session-{session_name}"], check=False)
+            sys.exit(1)
     
     # Commit and merge changes
     print("\nCommitting and merging changes...")
