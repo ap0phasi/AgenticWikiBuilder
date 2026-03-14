@@ -36,11 +36,12 @@ def create_session(source_path):
         (session_path / "processed").mkdir()
         (session_path / "docs").mkdir()
         
+        source_file = os.path.basename(source_path)
         # Copy source file to raw
         if not Path(source_path).exists():
             raise FileNotFoundError(f"Source file not found: {source_path}")
         
-        dest_path = session_path / "raw" / "info.md"
+        dest_path = session_path / "raw" / source_file
         shutil.copyfile(source_path, dest_path)
         print(f"✓ Copied {source_path} to {dest_path}")
         
